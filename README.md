@@ -76,11 +76,22 @@ Verified on this machine (macOS, Node 22, no emsdk installed):
 ## Workflows
 
 - [`build.yml`](.github/workflows/build.yml) — installs emsdk 2.0.31, builds,
-  tests, and checks formatting on push and pull request. It tried to install
-  `clang-format` with **`brew` on an `ubuntu-latest` runner**, where brew does
-  not exist; that step now uses `apt-get`. `actions/checkout` and
-  `actions/cache` were pinned at v2, which GitHub has since retired, and are
-  now v4.
+  tests, and checks formatting on push and pull request. Three things were
+  broken in it:
+  - It installed `clang-format` with **`brew` on an `ubuntu-latest` runner**,
+    where brew does not exist. It now uses pip with the version pinned
+    (`clang-format==14.0.6`), matching upstream — an unpinned clang-format
+    installs 18+, whose output differs enough to fail `check:style` on
+    correctly formatted code.
+  - `actions/checkout` and `actions/cache` were pinned at v2, since retired by
+    GitHub. Now v4.
+  - The build reached the end of the C++ compile and then died running
+    `node WasmModuleDeclarations.js`, the CMake step that emits
+    `source/WasmModule.d.ts`. Emscripten 2.0.31 dates from August 2021 and
+    generates JavaScript for the Node of that era; `ubuntu-latest` has since
+    moved to Node 24. The workflow now pins Node 16 before the emsdk step, and
+    logs `which -a node` plus `EMSDK_NODE` first, because emsdk bundles its own
+    Node and may take precedence on PATH.
 - [`publish.yml`](.github/workflows/publish.yml) — published to npm on every
   push to master. `package.json` still carries the upstream package name and
   author, so that would have aimed at **someone else's npm package**. The

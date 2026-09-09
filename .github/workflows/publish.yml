@@ -21,6 +21,11 @@ jobs:
             **/node_modules
           key: cpm-node-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake', '**/yarn.lock') }}
 
+      # See build.yml: Emscripten 2.0.31's generated JS needs a Node of its era.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 16
+
       - uses: mymindstorm/setup-emsdk@v10
         with:
           version: 2.0.31
