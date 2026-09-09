@@ -23,7 +23,7 @@
   "scripts": {
     "build": "tsc && cp source/WasmModule.d.ts source/WasmModule.js dist/",
     "watch": "tsc --watch",
-    "prepare": "rm -rf dist && yarn run configure:wasm && npm run build:wasm && npm run build",
+    "prepare": "rm -rf dist && npm run configure:wasm && npm run build:wasm && npm run build",
     "configure:wasm": "emcmake cmake -Hwasm -Bbuild/wasm -DCMAKE_BUILD_TYPE=Release",
     "build:wasm": "cmake --build build/wasm -j8",
     "build:wasm:debug": "emcmake cmake -Hwasm -Bbuild/wasm-debug && cmake --build build/wasm-debug -j8",

@@ -2,18 +2,19 @@
 
 name: Publish
 
+# Disabled as an automatic trigger: package.json still carries the upstream
+# package name, so a push to master would attempt to publish someone else's
+# npm package. Run by hand once the name and NPM_AUTH_TOKEN are this project's.
 on:
-  push:
-    branches:
-      - master
-    
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v4
         with:
           path: |
             **/cpm_modules
@@ -33,7 +34,6 @@ jobs:
         run: yarn run test
 
       - name: Publish
-        if: github.ref == 'refs/heads/master'
         uses: mikeal/merge-release@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,89 +1,96 @@
-![Build](https://github.com/TheLartians/modern-wasm-starter/workflows/Build/badge.svg)
-[![npm version](https://badge.fury.io/js/modern-wasm-starter.svg)](https://badge.fury.io/js/modern-wasm-starter)
+[![Build](https://github.com/giraphics/wasmnpm/actions/workflows/build.yml/badge.svg)](https://github.com/giraphics/wasmnpm/actions/workflows/build.yml)
 
-# Modern WASM Starter
+# wasmnpm — C++ to WebAssembly, packaged for npm
 
-A starter template to easily create WebAssembly packages for npm using type-safe C++ code with automatic declarations.
-This project should take care of most of the boilerplate code required to create a modern and type-safe WebAssembly project.
+An unmodified checkout of [TheLartians/modern-wasm-starter](https://github.com/TheLartians/modern-wasm-starter),
+kept here as a reference for the toolchain it demonstrates: type-safe C++
+compiled to WebAssembly and consumed from TypeScript, with the `.d.ts`
+declarations **generated from the C++** rather than written by hand.
 
-## Features
+There is nothing to look at — this is a library, not an application, so this
+README has no screenshots.
 
-- Integrated node.js packaging and dependency management through [npm](https://www.npmjs.com)
-- Type safety through [TypeScript](https://www.typescriptlang.org)
-- [CMake](https://cmake.org) build system
-- Integrated C++ dependency management using [CPM.cmake](https://github.com/TheLartians/CPM.cmake) 
-- Automatic bindings and typescript declarations using the [Glue](https://github.com/TheLartians/Glue) library
-- Integrated test suite using [jest](https://jestjs.io)
-- Code formatting enforced through [prettier](https://prettier.io) and [Format.cmake](https://github.com/TheLartians/Format.cmake)
-- Semi-automatic memory management using [scopes](#memory-management)
-- A [GitHub action](.github/workflows/publish.yml) to automatically [update the npm release](https://github.com/mikeal/merge-release) for each commit to master
+## What the toolchain does
 
-## Usage
-
-### Get started
-
-Use this repo [as a template](https://github.com/TheLartians/modern-wasm-starter/generate) to quickly start your own projects!
-
-### Build WebAssembly code
-
-To be able to build WebAssembly code from C++ using Emscripten, you must first [install and activate the emsdk](https://emscripten.org/docs/getting_started/downloads.html).
-To compile the C++ code to WebAssembly, run the following command from the project's root directory.
-
-```bash
-npm install
-```
-
-This will create the files `source/WasmModule.js` and `source/WasmModule.d.ts` from the C++ code in the [wasm](wasm) directory and transpile everything into a JavaScript module in the `dist` directory.
-To build your code as wasm, add it as a CPM.cmake dependency in the [CMakeLists.txt](wasm/CMakeLists.txt) file and define the bindings in the [wasmGlue.cpp](wasm/source/wasmGlue.cpp) source file.
-To update the wasm and TypeScript declarations, you can run `npm run build:wasm`. 
-
-### Run tests
-
-The following command will build and run the test suite.
-
-```bash
-npm test
-```
-
-For rapid developing, tests can also be started in watch mode, which will automatically run on any code change to the TypeScript or JavaScript sources.
-
-```bash
-npm start
-```
-
-### Fix code style
-
-The following command will run prettier on the TypeScript and clang-format on the C++ source code.
-
-```
-npm run fix:style
-```
-
-## Writing bindings
-
-This starter uses the Glue project to create bindings and declarations.
-Update the [wasmGlue.cpp](wasm/source/wasmGlue.cpp) source files to expose new classes or functions.
-See the [Glue](https://github.com/TheLartians/Glue) or [EmGlue](https://github.com/TheLartians/EmGlue) projects for documentation and examples.
-
-## Memory management
-
-As JavaScript has no destructors, any created C++ objects must be deleted manually, or they will be leaked.
-To simplify this, the project introduces memory scopes that semi-automatically take care of memory management.
-The usage is illustrated below.
+The C++ in `wasm/source/` declares a `Greeter` class through
+[Glue](https://github.com/TheLartians/Glue). At build time Emscripten compiles
+it and Glue emits `source/WasmModule.js` plus `source/WasmModule.d.ts`, so the
+TypeScript wrapper in `source/wasmWrapper.ts` is type-checked against the real
+C++ surface:
 
 ```ts
-import { withGreeter } from "modern-wasm-starter";
-
-// `withGreeter()` will run the callback asynchronously in a memory scope and return the result in a `Promise`
-withGreeter(greeterModule => {
-  // construct a new C++ `Greeter` instance
-  const greeter = new greeterModule.Greeter("Wasm");
-
-  // call a member function
-  console.log(greeter.greet(greeterModule.LanguageCode.EN));
-  
-  // any created C++ objects will be destroyed after the function exits, unless they are persisted
-});
+await withGreeter((greeterModule) => {
+  const greeter = new greeterModule.Greeter("Wasm")
+  greeter.greet(greeterModule.LanguageCode.EN)   // "Hello, Wasm!"
+})
 ```
 
-To see additional techniques, such as synchronous scopes or persisting and removing values outside of the scope, check out the [tests](__tests__/wasm.ts) or [API](source/wasmWrapper.ts).
+Those generated files are build artifacts and are not in the repository, which
+is why `npx tsc` on a fresh clone reports `Cannot find module './WasmModule'`.
+That is expected — build the WASM first.
+
+Memory is handled with scopes (`withGreeterScope`, `persistGreeterValue`,
+`deleteGreeterValue`), since C++ objects crossing into JS have no garbage
+collector to reclaim them.
+
+```text
+wasm/source/main.cpp        emscripten entry point; registers the Glue module
+wasm/source/wasmGlue.cpp    the C++ surface exposed to JS
+wasm/CMakeLists.txt         CMake + CPM.cmake dependency fetching
+source/wasmWrapper.ts       the typed JS wrapper and scope handling
+source/index.ts             public API, re-exported under Greeter* names
+__tests__/wasm.ts           jest tests that call across the boundary
+```
+
+## Requirements
+
+**Emscripten is mandatory.** Nothing here builds without it — not even
+`npm install`, because the `prepare` script compiles the WASM. Install and
+activate the [emsdk](https://emscripten.org/docs/getting_started/downloads.html)
+first, plus CMake.
+
+```bash
+npm install                 # runs prepare: configure + build wasm, then tsc
+npm test                    # jest, against the built module
+npm run build:wasm          # rebuild C++ only
+npm run check:style         # prettier + Format.cmake
+```
+
+Without emsdk on the PATH, `npm install` fails at the `emcmake` step. Use
+`npm install --ignore-scripts` if you only want the JS dependencies.
+
+## State of this checkout
+
+Verified on this machine (macOS, Node 22, no emsdk installed):
+
+- `npm install` **failed** — the `prepare` script called `yarn run
+  configure:wasm` while every other call in the same line used npm, so it died
+  with `sh: yarn: command not found` before ever reaching Emscripten. That is
+  now `npm run configure:wasm`; the failure is at least an honest emsdk error.
+- `npm install --ignore-scripts` succeeds.
+- `npx tsc` reports missing `./WasmModule` — expected without a WASM build, as
+  above.
+- The WASM build itself is **unverified here**; there is no emsdk on this
+  machine. CI installs one, so that is where it gets exercised.
+
+## Workflows
+
+- [`build.yml`](.github/workflows/build.yml) — installs emsdk 2.0.31, builds,
+  tests, and checks formatting on push and pull request. It tried to install
+  `clang-format` with **`brew` on an `ubuntu-latest` runner**, where brew does
+  not exist; that step now uses `apt-get`. `actions/checkout` and
+  `actions/cache` were pinned at v2, which GitHub has since retired, and are
+  now v4.
+- [`publish.yml`](.github/workflows/publish.yml) — published to npm on every
+  push to master. `package.json` still carries the upstream package name and
+  author, so that would have aimed at **someone else's npm package**. The
+  automatic trigger is disabled; it is `workflow_dispatch` only. Before
+  enabling it, change `name` and `author` in `package.json` and set
+  `NPM_AUTH_TOKEN`.
+
+## Credits
+
+[modern-wasm-starter](https://github.com/TheLartians/modern-wasm-starter) by
+Lars Melchior, under the license in [`LICENSE`](LICENSE). The upstream README
+documents the template's design in more detail; this file describes only the
+state of this checkout.
